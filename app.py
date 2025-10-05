@@ -3,12 +3,20 @@ import json
 from flask import Flask, request, jsonify, abort
 from models import db, Player, Game, Guess
 import game as game_logic
+from flask import send_from_directory
+
+
+
 
 DB_PATH = os.environ.get('DB_PATH', 'sqlite:///db.sqlite3')
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_PATH
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+@app.route('/')
+def serve_index():
+    return send_from_directory(os.path.join(app.root_path, 'static'), 'index.html')
 
 # initialize DB
 db.init_app(app)
