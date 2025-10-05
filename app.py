@@ -4,6 +4,8 @@ from flask import Flask, request, jsonify, abort
 from models import db, Player, Game, Guess
 import game as game_logic
 from flask import send_from_directory
+from flask_cors import CORS
+
 
 
 
@@ -23,7 +25,7 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
-
+CORS(app)
 @app.route('/api/games', methods=['POST'])
 def create_game():
     data = request.get_json() or {}

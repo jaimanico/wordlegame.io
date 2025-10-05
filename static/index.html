@@ -1,75 +1,38 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Wordle Game</title>
-  <style>
-    body { font-family: sans-serif; margin: 2em; }
-    #board { margin-top: 1em; }
-    .guess { margin: 0.2em 0; }
-    .letter { display: inline-block; width: 24px; height: 24px; text-align: center; border: 1px solid #ccc; margin-right: 4px; }
-    .correct { background-color: green; color: white; }
-    .present { background-color: goldenrod; color: white; }
-    .absent { background-color: #ddd; }
-  </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Wordle (Minimal)</title>
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <h1>Wordle (Minimal)</h1>
-  <div>
-    <label>Player: <input type="text" id="player" value="guest"></label>
-    <button onclick="startGame()">Start Game</button>
-  </div>
-  <div id="game" style="display:none;">
-    <h3>Game <span id="gameId"></span></h3>
-    <input type="text" id="guess" maxlength="5">
-    <button onclick="submitGuess()">Guess</button>
-    <div id="board"></div>
-  </div>
+  <main class="container">
+    <h1>Wordle (Minimal)</h1>
 
-  <script>
-    let gameId = null;
+    <div class="controls">
+      <label>
+        Player:
+        <input id="playerName" type="text" placeholder="guest" value="guest" />
+      </label>
+      <button id="startBtn">Start Game</button>
+    </div>
 
-    async function startGame(){
-      const player = document.getElementById('player').value;
-      const res = await fetch('/api/games', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({player})
-      });
-      const data = await res.json();
-      gameId = data.game.id;
-      document.getElementById('game').style.display = 'block';
-      document.getElementById('gameId').innerText = gameId;
-      document.getElementById('board').innerHTML = '';
-    }
+    <div id="gameInfo" class="game-info" hidden>
+      <h2 id="gameTitle">Game</h2>
+      <div id="statusLine" class="status"></div>
+    </div>
 
-    async function submitGuess(){
-      const guess = document.getElementById('guess').value;
-      if (!gameId) return alert('No game running');
-      const res = await fetch(`/api/games/${gameId}/guesses`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({guess})
-      });
-      const data = await res.json();
-      renderBoard(data.game.guesses);
-    }
+    <div id="board" class="board" aria-live="polite"></div>
 
-    async function renderBoard(guesses){
-      const board = document.getElementById('board');
-      board.innerHTML = '';
-      for (const g of guesses){
-        const div = document.createElement('div');
-        div.className = 'guess';
-        for (const f of g.feedback){
-          const span = document.createElement('span');
-          span.className = 'letter ' + f.state;
-          span.textContent = f.letter.toUpperCase();
-          div.appendChild(span);
-        }
-        board.appendChild(div);
-      }
-    }
-  </script>
+    <form id="guessForm" class="guess-form" onsubmit="return false;" hidden>
+      <input id="guessInput" maxlength="5" placeholder="Enter 5-letter word" autocomplete="off" />
+      <button id="guessBtn">Guess</button>
+    </form>
+
+    <div id="message" class="message" role="status"></div>
+  </main>
+
+  <script src="/static/script.js"></script>
 </body>
 </html>
