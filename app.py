@@ -26,6 +26,29 @@ with app.app_context():
     db.create_all()
 
 CORS(app)
+
+@app.route('/api/players', methods=['POST'])
+def create_player():
+    data = request.get_json() or {}
+    player_name = data.get('name') or data.get('player')
+    
+    if not player_name or not isinstance(player_name, str) or not player_name.strip():
+        return jsonify({'error': 'player name required'}), 400
+    
+    player_name = player_name.strip()
+    
+    # Check if player already exists
+    existing_player = Player.query.filter_by(name=player_name).first()
+    if existing_player:
+        return jsonify({'error': 'player already exists'}), 409
+    
+    # Create new player
+    new_player = Player(name=player_name)
+    db.session.add(new_player)
+    db.session.commit()
+    
+    return jsonify({'player': new_player.to_dict()}), 201
+
 @app.route('/api/games', methods=['POST'])
 def create_game():
     data = request.get_json() or {}
@@ -46,24 +69,41 @@ def create_game():
     db.session.add(new_game)
     db.session.commit()
 
-    return jsonify({'game': new_game.to_dict(), 'masked': '*****'}), 201
+    # Get all guesses for this game (should be empty at start)
+    guesses = [g.to_dict() for g in Guess.query.filter_by(game_id=new_game.id).order_by(Guess.created_at).all()]
+    # Parse feedback from JSON string to array for each guess
+    for guess_item in guesses:
+        if isinstance(guess_item.get('feedback'), str):
+            try:
+                guess_item['feedback'] = json.loads(guess_item['feedback'])
+            except:
+                guess_item['feedback'] = []
+
+    return jsonify({'game': new_game.to_dict(), 'masked': '*****', 'guesses': guesses}), 201
 
 
 @app.route('/api/games/<int:game_id>', methods=['GET'])
 def get_game(game_id):
     game = Game.query.get_or_404(game_id)
     guesses = [g.to_dict() for g in Guess.query.filter_by(game_id=game.id).order_by(Guess.created_at).all()]
+    
+    # Parse feedback from JSON string to array for each guess
+    for guess in guesses:
+        if isinstance(guess.get('feedback'), str):
+            try:
+                guess['feedback'] = json.loads(guess['feedback'])
+            except:
+                guess['feedback'] = []
+    
     resp = game.to_dict()
     resp['guesses'] = guesses
-    # do not reveal target_word unless finished (for dev only)
     if game.finished:
         resp['target_word'] = game.target_word
     else:
         resp['target_word'] = None
     return jsonify(resp)
 
-
-@app.route('/api/games/<int:game_id>/guesses', methods=['POST'])
+@app.route('/api/games/<int:game_id>/guess', methods=['POST'])
 def submit_guess(game_id):
     data = request.get_json() or {}
     guess = (data.get('guess') or '').strip().lower()
@@ -81,7 +121,7 @@ def submit_guess(game_id):
 
     game.attempts += 1
     # check win
-    if all(p['state'] == 'correct' for p in feedback):
+    if all(p == 'correct' for p in feedback):
         game.finished = True
         game.won = True
     elif game.attempts >= game.max_attempts:
@@ -90,9 +130,26 @@ def submit_guess(game_id):
 
     db.session.commit()
 
+    # Get the guess dict and ensure feedback is parsed from JSON string
     resp = g.to_dict()
+    if isinstance(resp.get('feedback'), str):
+        try:
+            resp['feedback'] = json.loads(resp['feedback'])
+        except:
+            resp['feedback'] = []
+
+    # Include all guesses to maintain the full history
+    guesses = [g.to_dict() for g in Guess.query.filter_by(game_id=game.id).order_by(Guess.created_at).all()]
+    # Parse feedback from JSON string to array for each guess
+    for guess_item in guesses:
+        if isinstance(guess_item.get('feedback'), str):
+            try:
+                guess_item['feedback'] = json.loads(guess_item['feedback'])
+            except:
+                guess_item['feedback'] = []
+    
     resp_game = game.to_dict()
-    return jsonify({'guess': resp, 'game': resp_game}), 201
+    return jsonify({'guess': resp, 'game': resp_game, 'guesses': guesses}), 201
 
 
 @app.route('/api/leaderboard', methods=['GET'])
@@ -117,10 +174,12 @@ def leaderboard():
     return jsonify({'leaderboard': board})
 
 
-@app.route('/')
-def index():
-    return jsonify({'message': 'Wordle API — up and running'})
 
+
+print("==== Registered Flask routes ====")
+for rule in app.url_map.iter_rules():
+    print(rule)
+print("=================================")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)

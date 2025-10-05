@@ -24,7 +24,7 @@ def evaluate_guess(target: str, guess: str):
     """Return feedback list for each letter: 'correct', 'present', 'absent'
 
     Implements Wordle rules with proper handling of repeated letters.
-    Returns a list of dicts: [{ 'letter': 'c', 'state': 'correct' }, ...]
+    Returns a list of states: ['correct', 'present', 'absent', ...]
     """
     target = target.lower()
     guess = guess.lower()
@@ -37,7 +37,7 @@ def evaluate_guess(target: str, guess: str):
     # first pass: mark corrects
     for i, (t, g) in enumerate(zip(target, guess)):
         if t == g:
-            result[i] = {'letter': g, 'state': 'correct'}
+            result[i] = 'correct'
         else:
             target_counts[t] = target_counts.get(t, 0) + 1
 
@@ -46,9 +46,79 @@ def evaluate_guess(target: str, guess: str):
         if result[i] is not None:
             continue
         if target_counts.get(g, 0) > 0:
-            result[i] = {'letter': g, 'state': 'present'}
+            result[i] = 'present'
             target_counts[g] -= 1
         else:
-            result[i] = {'letter': g, 'state': 'absent'}
+            result[i] = 'absent'
 
     return result
+
+
+class WordleGame:
+    """
+    Class to handle a single Wordle game instance.
+    
+    Attributes:
+        target_word (str): The word to be guessed
+        guesses (list): List of guesses made so far
+        max_attempts (int): Maximum number of allowed guesses (default 6)
+        is_won (bool): Whether the game has been won
+    """
+    
+    def __init__(self, target_word: str, max_attempts: int = 6):
+        """
+        Initialize a Wordle game.
+        
+        Args:
+            target_word (str): The word that needs to be guessed
+            max_attempts (int): Maximum number of attempts allowed (default 6)
+        """
+        self.target_word = target_word.lower()
+        self.guesses = []
+        self.max_attempts = max_attempts
+        self.is_won = False
+        
+    def make_guess(self, guess_word: str):
+        """
+        Submit a guess and return feedback.
+        
+        Args:
+            guess_word (str): The 5-letter word being guessed
+            
+        Returns:
+            list: Feedback for each letter in the format 
+                  [{'letter': 'A', 'position': 0, 'status': 'correct'}, ...]
+        """
+        guess_word = guess_word.lower()
+        feedback = evaluate_guess(self.target_word, guess_word)
+        
+        # Store the guess with its feedback
+        guess_entry = {
+            'word': guess_word,
+            'feedback': feedback
+        }
+        self.guesses.append(guess_entry)
+        
+        # Check if the guess was correct
+        if all(status == 'correct' for status in feedback):
+            self.is_won = True
+            
+        # Format feedback in the expected structure for the frontend
+        formatted_feedback = []
+        for i, (letter, status) in enumerate(zip(guess_word, feedback)):
+            formatted_feedback.append({
+                'letter': letter,
+                'position': i,
+                'status': status
+            })
+            
+        return formatted_feedback
+    
+    def is_game_over(self):
+        """
+        Check if the game is over (either won or max attempts reached).
+        
+        Returns:
+            bool: True if game is over, False otherwise
+        """
+        return self.is_won or len(self.guesses) >= self.max_attempts
