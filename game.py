@@ -1,57 +1,80 @@
 import random
-import json
+from dataclasses import dataclass
 from functools import lru_cache
+from typing import List
 
-WORDS_FILE = 'words.txt'
+from constants import (
+    DEFAULT_MAX_ATTEMPTS,
+    FILE_ENCODING,
+    STATUS_ABSENT,
+    STATUS_CORRECT,
+    STATUS_PRESENT,
+    WORD_LENGTH,
+    WORDS_FILE,
+)
+
 
 @lru_cache(maxsize=1)
-def load_words(path=WORDS_FILE):
-    with open(path, 'r', encoding='utf-8') as f:
-        words = [w.strip().lower() for w in f if w.strip()]
-    # keep only 5-letter words
-    words = [w for w in words if len(w) == 5]
-    return words
+def load_words(path: str = WORDS_FILE, word_length: int = WORD_LENGTH) -> List[str]:
+    """Load and cache valid candidate words."""
+    with open(path, "r", encoding=FILE_ENCODING) as words_file:
+        normalized = [_normalize_word(line) for line in words_file if line.strip()]
+    return [word for word in normalized if len(word) == word_length]
 
 
-def choose_word(path=WORDS_FILE):
+def choose_word(path: str = WORDS_FILE) -> str:
+    """Return a random target word."""
     words = load_words(path)
     if not words:
-        raise RuntimeError('words list is empty')
+        raise RuntimeError("words list is empty")
     return random.choice(words)
 
 
-def evaluate_guess(target: str, guess: str):
-    """Return feedback list for each letter: 'correct', 'present', 'absent'
+def evaluate_guess(target: str, guess: str) -> List[str]:
+    """Return feedback list for each letter: 'correct', 'present', 'absent'."""
+    normalized_target = _normalize_word(target)
+    normalized_guess = _normalize_word(guess)
+    _validate_word_length(normalized_target, "target")
+    _validate_word_length(normalized_guess, "guess")
 
-    Implements Wordle rules with proper handling of repeated letters.
-    Returns a list of states: ['correct', 'present', 'absent', ...]
-    """
-    target = target.lower()
-    guess = guess.lower()
-    if len(target) != len(guess):
-        raise ValueError('target and guess must be same length')
-
-    result = [None] * len(guess)
+    result: List[str] = [None] * len(normalized_guess)
     target_counts = {}
 
-    # first pass: mark corrects
-    for i, (t, g) in enumerate(zip(target, guess)):
-        if t == g:
-            result[i] = 'correct'
+    for index, (target_letter, guess_letter) in enumerate(
+        zip(normalized_target, normalized_guess)
+    ):
+        if target_letter == guess_letter:
+            result[index] = STATUS_CORRECT
         else:
-            target_counts[t] = target_counts.get(t, 0) + 1
+            target_counts[target_letter] = target_counts.get(target_letter, 0) + 1
 
-    # second pass: mark presents/absents
-    for i, g in enumerate(guess):
-        if result[i] is not None:
+    for index, guess_letter in enumerate(normalized_guess):
+        if result[index] is not None:
             continue
-        if target_counts.get(g, 0) > 0:
-            result[i] = 'present'
-            target_counts[g] -= 1
+        if target_counts.get(guess_letter, 0) > 0:
+            result[index] = STATUS_PRESENT
+            target_counts[guess_letter] -= 1
         else:
-            result[i] = 'absent'
+            result[index] = STATUS_ABSENT
 
     return result
+
+
+@dataclass
+class GuessFeedback:
+    """Encapsulates a single guess and its evaluation statuses."""
+
+    word: str
+    statuses: List[str]
+
+    def is_correct(self) -> bool:
+        return all(status == STATUS_CORRECT for status in self.statuses)
+
+    def as_entries(self) -> List[dict]:
+        return [
+            {"letter": letter, "position": index, "status": status}
+            for index, (letter, status) in enumerate(zip(self.word, self.statuses))
+        ]
 
 
 class WordleGame:
@@ -65,7 +88,7 @@ class WordleGame:
         is_won (bool): Whether the game has been won
     """
     
-    def __init__(self, target_word: str, max_attempts: int = 6):
+    def __init__(self, target_word: str, max_attempts: int = DEFAULT_MAX_ATTEMPTS):
         """
         Initialize a Wordle game.
         
@@ -73,8 +96,10 @@ class WordleGame:
             target_word (str): The word that needs to be guessed
             max_attempts (int): Maximum number of attempts allowed (default 6)
         """
-        self.target_word = target_word.lower()
-        self.guesses = []
+        normalized_target = _normalize_word(target_word)
+        _validate_word_length(normalized_target, "target")
+        self.target_word = normalized_target
+        self.guesses: List[GuessFeedback] = []
         self.max_attempts = max_attempts
         self.is_won = False
         
@@ -89,30 +114,16 @@ class WordleGame:
             list: Feedback for each letter in the format 
                   [{'letter': 'A', 'position': 0, 'status': 'correct'}, ...]
         """
-        guess_word = guess_word.lower()
-        feedback = evaluate_guess(self.target_word, guess_word)
-        
-        # Store the guess with its feedback
-        guess_entry = {
-            'word': guess_word,
-            'feedback': feedback
-        }
-        self.guesses.append(guess_entry)
-        
-        # Check if the guess was correct
-        if all(status == 'correct' for status in feedback):
+        normalized_guess = _normalize_word(guess_word)
+        feedback_statuses = evaluate_guess(self.target_word, normalized_guess)
+
+        guess_feedback = GuessFeedback(word=normalized_guess, statuses=feedback_statuses)
+        self.guesses.append(guess_feedback)
+
+        if guess_feedback.is_correct():
             self.is_won = True
-            
-        # Format feedback in the expected structure for the frontend
-        formatted_feedback = []
-        for i, (letter, status) in enumerate(zip(guess_word, feedback)):
-            formatted_feedback.append({
-                'letter': letter,
-                'position': i,
-                'status': status
-            })
-            
-        return formatted_feedback
+
+        return guess_feedback.as_entries()
     
     def is_game_over(self):
         """
@@ -122,3 +133,12 @@ class WordleGame:
             bool: True if game is over, False otherwise
         """
         return self.is_won or len(self.guesses) >= self.max_attempts
+
+
+def _normalize_word(word: str) -> str:
+    return word.strip().lower()
+
+
+def _validate_word_length(word: str, label: str, expected_length: int = WORD_LENGTH):
+    if len(word) != expected_length:
+        raise ValueError(f"{label} must be {expected_length} letters long")

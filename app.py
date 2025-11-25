@@ -1,10 +1,11 @@
 import os
 import json
-from flask import Flask, request, jsonify, abort
-from models import db, Player, Game, Guess
-import game as game_logic
-from flask import send_from_directory
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+
+import game as game_logic
+from constants import STATUS_CORRECT, WORD_LENGTH
+from models import db, Player, Game, Guess
 
 
 
@@ -69,31 +70,15 @@ def create_game():
     db.session.add(new_game)
     db.session.commit()
 
-    # Get all guesses for this game (should be empty at start)
-    guesses = [g.to_dict() for g in Guess.query.filter_by(game_id=new_game.id).order_by(Guess.created_at).all()]
-    # Parse feedback from JSON string to array for each guess
-    for guess_item in guesses:
-        if isinstance(guess_item.get('feedback'), str):
-            try:
-                guess_item['feedback'] = json.loads(guess_item['feedback'])
-            except:
-                guess_item['feedback'] = []
+    guesses = _fetch_guess_history(new_game.id)
 
-    return jsonify({'game': new_game.to_dict(), 'masked': '*****', 'guesses': guesses}), 201
+    return jsonify({'game': new_game.to_dict(), 'masked': '*' * WORD_LENGTH, 'guesses': guesses}), 201
 
 
 @app.route('/api/games/<int:game_id>', methods=['GET'])
 def get_game(game_id):
     game = Game.query.get_or_404(game_id)
-    guesses = [g.to_dict() for g in Guess.query.filter_by(game_id=game.id).order_by(Guess.created_at).all()]
-    
-    # Parse feedback from JSON string to array for each guess
-    for guess in guesses:
-        if isinstance(guess.get('feedback'), str):
-            try:
-                guess['feedback'] = json.loads(guess['feedback'])
-            except:
-                guess['feedback'] = []
+    guesses = _fetch_guess_history(game.id)
     
     resp = game.to_dict()
     resp['guesses'] = guesses
@@ -107,8 +92,8 @@ def get_game(game_id):
 def submit_guess(game_id):
     data = request.get_json() or {}
     guess = (data.get('guess') or '').strip().lower()
-    if len(guess) != 5:
-        return jsonify({'error': 'guess must be 5 letters'}), 400
+    if len(guess) != WORD_LENGTH:
+        return jsonify({'error': f'guess must be {WORD_LENGTH} letters'}), 400
 
     game = Game.query.get_or_404(game_id)
     if game.finished:
@@ -121,7 +106,7 @@ def submit_guess(game_id):
 
     game.attempts += 1
     # check win
-    if all(p == 'correct' for p in feedback):
+    if all(p == STATUS_CORRECT for p in feedback):
         game.finished = True
         game.won = True
     elif game.attempts >= game.max_attempts:
@@ -132,21 +117,9 @@ def submit_guess(game_id):
 
     # Get the guess dict and ensure feedback is parsed from JSON string
     resp = g.to_dict()
-    if isinstance(resp.get('feedback'), str):
-        try:
-            resp['feedback'] = json.loads(resp['feedback'])
-        except:
-            resp['feedback'] = []
 
     # Include all guesses to maintain the full history
-    guesses = [g.to_dict() for g in Guess.query.filter_by(game_id=game.id).order_by(Guess.created_at).all()]
-    # Parse feedback from JSON string to array for each guess
-    for guess_item in guesses:
-        if isinstance(guess_item.get('feedback'), str):
-            try:
-                guess_item['feedback'] = json.loads(guess_item['feedback'])
-            except:
-                guess_item['feedback'] = []
+    guesses = _fetch_guess_history(game.id)
     
     resp_game = game.to_dict()
     return jsonify({'guess': resp, 'game': resp_game, 'guesses': guesses}), 201
@@ -172,8 +145,9 @@ def leaderboard():
         })
     board = sorted(board, key=lambda x: (-x['wins'], x['avg_attempts_for_wins'] or 999))
     return jsonify({'leaderboard': board})
-
-
+def _fetch_guess_history(game_id):
+    guesses = Guess.query.filter_by(game_id=game_id).order_by(Guess.created_at).all()
+    return [guess.to_dict() for guess in guesses]
 
 
 print("==== Registered Flask routes ====")
