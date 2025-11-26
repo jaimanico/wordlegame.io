@@ -42,3 +42,17 @@ def test_game_flow_and_leaderboard(client, app_instance, monkeypatch):
         assert Game.query.count() == 1
         assert Guess.query.count() == 1
 
+
+def test_health_endpoint_reports_status(client):
+    resp = client.get('/health')
+    payload = resp.get_json()
+    assert resp.status_code == 200
+    assert payload['status'] == 'ok'
+    assert payload['uptime_seconds'] >= 0
+
+
+def test_metrics_endpoint_exposes_prometheus_text(client):
+    resp = client.get('/metrics')
+    assert resp.status_code == 200
+    assert b'app_requests_total' in resp.data
+

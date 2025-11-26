@@ -1,7 +1,14 @@
-import os
 import json
-from flask import Flask, request, jsonify, send_from_directory
+import os
+import time
+from flask import Flask, Response, g, jsonify, request, send_from_directory
 from flask_cors import CORS
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Histogram,
+    generate_latest,
+)
 
 import game as game_logic
 from constants import STATUS_CORRECT, WORD_LENGTH
@@ -9,6 +16,22 @@ from models import db, Player, Game, Guess
 
 
 DEFAULT_DB_PATH = 'sqlite:///db.sqlite3'
+APP_START_TIME = time.perf_counter()
+REQUEST_COUNT = Counter(
+    "app_requests_total",
+    "Total number of HTTP requests processed.",
+    ["method", "endpoint", "http_status"],
+)
+REQUEST_LATENCY = Histogram(
+    "app_request_latency_seconds",
+    "Request latency in seconds.",
+    ["endpoint"],
+)
+ERROR_COUNT = Counter(
+    "app_errors_total",
+    "Total number of requests that raised an exception.",
+    ["endpoint"],
+)
 
 
 def create_app(config_override=None):
@@ -27,6 +50,7 @@ def create_app(config_override=None):
         db.create_all()
 
     CORS(app)
+    _register_metrics(app)
     register_routes(app)
     return app
 
@@ -143,10 +167,47 @@ def register_routes(app):
         board = sorted(board, key=lambda x: (-x['wins'], x['avg_attempts_for_wins'] or 999))
         return jsonify({'leaderboard': board})
 
+    @app.route('/health')
+    def health():
+        uptime = time.perf_counter() - APP_START_TIME
+        return jsonify({
+            'status': 'ok',
+            'uptime_seconds': round(uptime, 2),
+            'timestamp': time.time(),
+        })
+
+    @app.route('/metrics')
+    def metrics():
+        return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
 
 def _fetch_guess_history(game_id):
     guesses = Guess.query.filter_by(game_id=game_id).order_by(Guess.created_at).all()
     return [guess.to_dict() for guess in guesses]
+
+
+def _register_metrics(app):
+    @app.before_request
+    def _start_timer():
+        g.request_start_time = time.perf_counter()
+
+    @app.after_request
+    def _record_request(response):
+        endpoint = request.endpoint or request.path
+        latency = time.perf_counter() - g.get("request_start_time", time.perf_counter())
+        REQUEST_LATENCY.labels(endpoint=endpoint).observe(latency)
+        REQUEST_COUNT.labels(
+            method=request.method,
+            endpoint=endpoint,
+            http_status=response.status_code,
+        ).inc()
+        return response
+
+    @app.teardown_request
+    def _track_errors(exc):
+        if exc is not None:
+            endpoint = request.endpoint or request.path
+            ERROR_COUNT.labels(endpoint=endpoint).inc()
 
 
 def _log_routes(app):
