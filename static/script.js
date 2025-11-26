@@ -15,10 +15,18 @@ const guessForm = document.getElementById('guessForm');
 const guessInput = document.getElementById('guessInput');
 const guessBtn = document.getElementById('guessBtn');
 const messageEl = document.getElementById('message');
+const endScreen = document.getElementById('endScreen');
+const endTitle = document.getElementById('endTitle');
+const endSubtitle = document.getElementById('endSubtitle');
+const endWord = document.getElementById('endWord');
+const restartBtn = document.getElementById('restartBtn');
 
 startBtn.addEventListener('click', startGame);
 guessBtn.addEventListener('click', submitGuess);
 guessInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGuess(); });
+if (restartBtn) {
+  restartBtn.addEventListener('click', handleRestart);
+}
 
 // ------------------- helpers -------------------
 
@@ -95,6 +103,23 @@ function updateStatus() {
   statusLine.textContent = `Attempts left: ${attemptsLeft}`;
 }
 
+function hideEndScreen() {
+  if (!endScreen) return;
+  endScreen.classList.remove('visible');
+  endScreen.setAttribute('aria-hidden', 'true');
+}
+
+function showEndScreen({ won, word }) {
+  if (!endScreen) return;
+  endTitle.textContent = won ? 'You cracked it!' : 'Game over';
+  endSubtitle.textContent = won
+    ? 'Nice job. Ready for another round?'
+    : 'Better luck next time. Want to try again?';
+  endWord.textContent = word ? `The word was ${word}` : '';
+  endScreen.classList.add('visible');
+  endScreen.setAttribute('aria-hidden', 'false');
+}
+
 // safe JSON parser that won't throw when server returns no json
 async function safeJson(response) {
   try {
@@ -153,6 +178,7 @@ function renderBoard() {
 
 async function startGame() {
   showMessage('');
+  hideEndScreen();
   const player = (playerName.value || 'guest').trim();
   startBtn.disabled = true;
 
@@ -174,13 +200,18 @@ async function startGame() {
     window.__target_word_for_ui = null;
 
     // Accept multiple shapes
-    gameId = data.game_id ?? data.id ?? (data.game && (data.game.id ?? data.game.game_id)) ?? null;
+    const gamePayload = data.game ?? data;
+    gameId = data.game_id ?? data.id ?? (gamePayload && (gamePayload.id ?? gamePayload.game_id)) ?? null;
 
     guesses = Array.isArray(data.guesses) ? data.guesses :
-              (Array.isArray(data.game?.guesses) ? data.game.guesses : []);
+              (Array.isArray(gamePayload?.guesses) ? gamePayload.guesses : []);
 
-    wordLength = data.word_length ?? data.game?.word_length ?? 5;
-    attemptsLeft = data.attempts_left ?? data.game?.attempts_left ?? 6;
+    wordLength = data.word_length ?? gamePayload?.word_length ?? 5;
+
+    // Backend tracks attempts and max_attempts; derive attemptsLeft here
+    const maxAttemptsStart = gamePayload?.max_attempts ?? 6;
+    const attemptsUsedStart = gamePayload?.attempts ?? 0;
+    attemptsLeft = Math.max(0, maxAttemptsStart - attemptsUsedStart);
 
     gameInfo.hidden = false;
     guessForm.hidden = false;
@@ -248,11 +279,13 @@ async function submitGuess() {
       return;
     }
 
+    const gamePayload = data.game ?? data;
+
     // Normalize guesses array from different shapes:
     if (Array.isArray(data.guesses)) {
       guesses = data.guesses;
-    } else if (Array.isArray(data.game?.guesses)) {
-      guesses = data.game.guesses;
+    } else if (Array.isArray(gamePayload?.guesses)) {
+      guesses = gamePayload.guesses;
     } else if (Array.isArray(data)) {
       guesses = data;
     } else {
@@ -260,8 +293,10 @@ async function submitGuess() {
       guesses.push({ word: raw, feedback: Array(wordLength).fill('absent') });
     }
 
-    // Attempt to read attempts_left from response; fallback to safe decrement if absent
-    attemptsLeft = data.attempts_left ?? data.game?.attempts_left ?? Math.max(0, attemptsLeft - 1);
+    // Derive attemptsLeft from gamePayload.attempts / max_attempts when available
+    const maxAttempts = gamePayload?.max_attempts ?? 6;
+    const attemptsUsed = gamePayload?.attempts ?? guesses.length ?? 0;
+    attemptsLeft = Math.max(0, maxAttempts - attemptsUsed);
 
     // If backend returned a revealed target, cache it
     const targetWord = (data.target_word ?? data.target ?? data.solution ?? data.answer ?? data.game?.target_word ?? null);
@@ -270,12 +305,13 @@ async function submitGuess() {
     renderBoard();
     updateStatus();
 
-    const won = (data.is_won ?? data.game?.is_won) === true;
+    const won = (data.won ?? gamePayload?.won) === true;
 
     if (won) {
       const finalWord = window.__target_word_for_ui || guesses.at(-1)?.word || raw;
       showMessage(`🎉 You won! The word was ${finalWord}`);
       guessForm.hidden = true;
+      showEndScreen({ won: true, word: finalWord });
     } else if (attemptsLeft <= 0) {
       // Try to fetch final target from backend if not provided
       let finalTarget = window.__target_word_for_ui;
@@ -296,6 +332,7 @@ async function submitGuess() {
         showMessage('Game over. The word was unknown');
       }
       guessForm.hidden = true;
+      showEndScreen({ won: false, word: finalTarget });
     } else {
       // continue play
       guessInput.value = '';
@@ -308,4 +345,15 @@ async function submitGuess() {
     guessBtn.disabled = false;
     guessInput.disabled = false;
   }
+}
+
+async function handleRestart() {
+  // Clear current state and start a fresh game for the same player
+  guesses = [];
+  attemptsLeft = 6;
+  wordLength = 5;
+  board.innerHTML = '';
+  showMessage('');
+  hideEndScreen();
+  await startGame();
 }

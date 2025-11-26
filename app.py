@@ -123,6 +123,12 @@ def register_routes(app):
         if len(guess) != WORD_LENGTH:
             return jsonify({'error': f'guess must be {WORD_LENGTH} letters'}), 400
 
+        # Enforce that guesses must come from the same dictionary as target words
+        # This prevents random 5-letter strings that are not in words.txt.
+        valid_words = game_logic.load_words()
+        if guess not in valid_words:
+            return jsonify({'error': 'guess must be a valid word from the dictionary'}), 400
+
         game = Game.query.get_or_404(game_id)
         if game.finished:
             return jsonify({'error': 'game already finished'}), 400

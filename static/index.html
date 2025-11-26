@@ -8,29 +8,52 @@
 </head>
 <body>
   <main class="container">
-    <h1>Wordle (Minimal)</h1>
+    <header class="header">
+      <div>
+        <h1>Wordle</h1>
+      </div>
+    </header>
 
-    <div class="controls">
-      <label>
-        Player:
-        <input id="playerName" type="text" placeholder="guest" value="guest" />
-      </label>
-      <button id="startBtn">Start Game</button>
+    <section class="panel">
+      <div class="controls">
+        <label class="field">
+          <span class="field-label">Player</span>
+          <input id="playerName" type="text" placeholder="guest" value="guest" />
+        </label>
+        <button id="startBtn" class="btn primary">Start Game</button>
+      </div>
+    </section>
+
+    <section id="gameInfo" class="game-info panel" hidden>
+      <div class="game-header">
+        <h2 id="gameTitle">Game</h2>
+        <span id="statusLine" class="status"></span>
+      </div>
+    </section>
+
+    <section class="panel board-panel">
+      <div id="board" class="board" aria-live="polite"></div>
+    </section>
+
+    <section class="panel">
+      <form id="guessForm" class="guess-form" onsubmit="return false;" hidden>
+        <input id="guessInput" maxlength="5" placeholder="Enter 5-letter word" autocomplete="off" />
+        <button id="guessBtn" class="btn success">Guess</button>
+      </form>
+      <div id="message" class="message" role="status"></div>
+    </section>
+
+    <div id="endScreen" class="end-screen" aria-hidden="true">
+      <div class="end-screen-backdrop"></div>
+      <div class="end-screen-card" role="dialog" aria-modal="true" aria-labelledby="endTitle">
+        <h2 id="endTitle" class="end-title">Game over</h2>
+        <p id="endSubtitle" class="end-subtitle"></p>
+        <p id="endWord" class="end-word"></p>
+        <div class="end-actions">
+          <button id="restartBtn" class="btn success">Play again</button>
+        </div>
+      </div>
     </div>
-
-    <div id="gameInfo" class="game-info" hidden>
-      <h2 id="gameTitle">Game</h2>
-      <div id="statusLine" class="status"></div>
-    </div>
-
-    <div id="board" class="board" aria-live="polite"></div>
-
-    <form id="guessForm" class="guess-form" onsubmit="return false;" hidden>
-      <input id="guessInput" maxlength="5" placeholder="Enter 5-letter word" autocomplete="off" />
-      <button id="guessBtn">Guess</button>
-    </form>
-
-    <div id="message" class="message" role="status"></div>
   </main>
 
   <script src="/static/script.js"></script>
