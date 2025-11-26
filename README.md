@@ -56,6 +56,8 @@ wordle-project/
 - `GET /api/games/<game_id>` - Get current game state
 - `POST /api/games/<game_id>/guess` - Submit a guess
 - `GET /api/leaderboard` - Get player leaderboard
+- `GET /health` - Lightweight health check with uptime metadata
+- `GET /metrics` - Prometheus-formatted metrics (requests, latency, errors)
 
 ## 🚀 Installation
 
@@ -164,6 +166,24 @@ The application is built with clean separation of concerns:
 The workflow already uses `GITHUB_TOKEN` for GHCR access, so no extra registry secrets are required unless you switch registries.
 
 Only the `main` branch deploys automatically; other branches still run the CI portion (tests + docker build).
+
+## 📈 Monitoring & Health
+
+- `/health` returns JSON with `status`, `uptime_seconds`, and the current timestamp. Use this for readiness/liveness probes.
+- `/metrics` exposes Prometheus metrics. Out of the box it exports:
+  - `app_requests_total{method,endpoint,http_status}`
+  - `app_request_latency_seconds{endpoint}`
+  - `app_errors_total{endpoint}`
+- Minimal Prometheus setup is provided at `monitoring/prometheus.yml`. Point the `targets` entry to wherever the app runs (default `localhost:5000`). Example usage:
+
+  ```bash
+  prometheus --config.file=monitoring/prometheus.yml
+  ```
+
+- Once Prometheus is scraping `/metrics`, you can plug it into Grafana and create panels for request rate, P95 latency, etc. A simple Grafana dashboard can query:
+  - `rate(app_requests_total[5m])` for QPS
+  - `histogram_quantile(0.95, sum(rate(app_request_latency_seconds_bucket[5m])) by (le))` for latency
+  - `rate(app_errors_total[5m])` for error trends
 
 ## 🤝 Contributing
 
