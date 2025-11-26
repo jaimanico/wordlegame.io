@@ -36,10 +36,16 @@ wordle-project/
 │   ├── script.js         # Frontend game logic
 │   └── style.css         # Frontend styling
 ├── tests/
-│   └── test_game.py      # Unit tests
+│   ├── conftest.py       # pytest fixtures
+│   ├── test_app_integration.py
+│   ├── test_game_logic.py
+│   ├── test_game.py
+│   └── test_models.py
+├── scripts/
+│   └── deploy.sh         # Deployment helper used by CI/CD
 └── .github/
     └── workflows/
-        └── ci.yml        # GitHub Actions CI
+        └── ci.yml        # GitHub Actions CI/CD
 ```
 
 ## 🛠️ API Endpoints
@@ -103,15 +109,13 @@ docker run -p 5000:5000 wordle-app
 
 ## 🧪 Testing
 
-Run the unit tests:
+Run the automated test suite with coverage (fails if <70%):
 ```bash
-pytest tests/
+pytest --cov=. --cov-report=term --cov-report=xml --cov-report=html:reports/htmlcov
+coverage report --fail-under=70
 ```
 
-Run all tests with verbose output:
-```bash
-pytest tests/ -v
-```
+Coverage artifacts are written to `.coverage`, `coverage.xml`, and `reports/htmlcov` (all gitignored).
 
 ## 🔧 Development
 
@@ -138,6 +142,28 @@ The application is built with clean separation of concerns:
 - Responsive design with CSS Grid and Flexbox
 - Client-side JavaScript handles game state and API communication
 - Color-coded feedback consistent with Wordle conventions
+
+## ⚙️ CI/CD
+
+- **Location:** `.github/workflows/ci.yml`
+- **Triggers:** pushes & pull requests targeting `main` or `develop`
+- **Steps:**
+  1. Install dependencies.
+  2. Run `pytest` with coverage; pipeline fails if coverage drops below 70%.
+  3. Upload coverage artifacts.
+  4. Authenticate against GitHub Container Registry (GHCR), build the Docker image, and push on direct pushes.
+  5. Deploy job runs only for pushes to `main`; it reuses the built image and invokes `scripts/deploy.sh`.
+
+### Required secrets
+
+| Secret | Purpose |
+| ------ | ------- |
+| `DEPLOY_WEBHOOK_URL` | HTTPS endpoint that triggers the cloud deployment (Render, Fly.io, etc.). |
+| `DEPLOY_PAYLOAD` *(optional)* | Extra payload sent to the webhook for custom automation. |
+
+The workflow already uses `GITHUB_TOKEN` for GHCR access, so no extra registry secrets are required unless you switch registries.
+
+Only the `main` branch deploys automatically; other branches still run the CI portion (tests + docker build).
 
 ## 🤝 Contributing
 
