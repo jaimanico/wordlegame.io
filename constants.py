@@ -1,3 +1,5 @@
+"""Shared configuration for the Wordle game domain."""
+
 WORD_LENGTH = 5
 DEFAULT_MAX_ATTEMPTS = 6
 WORDS_FILE = "words.txt"
@@ -7,4 +9,3 @@ STATUS_CORRECT = "correct"
 STATUS_PRESENT = "present"
 STATUS_ABSENT = "absent"
 LETTER_STATUSES = (STATUS_CORRECT, STATUS_PRESENT, STATUS_ABSENT)
-

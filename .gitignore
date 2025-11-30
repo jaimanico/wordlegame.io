@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.coverage
+reports/
+.pytest_cache/
+coverage.xml
+
