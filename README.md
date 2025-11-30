@@ -65,20 +65,6 @@ wordle-project/
 - Python 3.8+
 - Docker and Docker Compose (optional)
 
-### Setup
-1. Clone the repository
-2. Create a virtual environment (recommended):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## ▶️ Running Locally
-
 ### Direct Python Execution
 ```bash
 python app.py
@@ -102,10 +88,8 @@ The application will be available at `http://localhost:5000`
 
 ### Building and Running Manually
 ```bash
-# Build the image
 docker build -t wordle-app .
 
-# Run the container
 docker run -p 5000:5000 wordle-app
 ```
 
